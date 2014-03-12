@@ -1,0 +1,1 @@
+from Rtti import RttiInfoRttiInfo = reload(RttiInfo)class MsvcInfo :	def __init__(self) :		self.Rtti = RttiInfo.RttiInfo()		pass			pass#

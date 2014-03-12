@@ -1,0 +1,1 @@
+from Msvc import MsvcInfoMsvcInfo = reload(MsvcInfo)print "dev_zzo's Uber MSVC Script!"m = MsvcInfo.MsvcInfo()
