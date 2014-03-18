@@ -27,7 +27,8 @@ def findTypeDescriptorCandidates() :
 	ea = dataBounds[0] + 8
 	while ea < dataBounds[1] :
 		# if (ea % 0x2000) == 0 : print "At %08x" % ea
-		if IDAHacks.getUInt32(ea) == 0x56413F2E and IDAHacks.getUInt32(ea - 4) == 0:
+		v = IDAHacks.getUInt32(ea)
+		if (v == 0x56413F2E or v == 0x55413F2E) and IDAHacks.getUInt32(ea - 4) == 0 :
 			# Note: this check can potentially be skipped...
 			vfptr = IDAHacks.getUInt32(ea - 8)
 			if rdataBounds[0] <= vfptr < rdataBounds[1] :
