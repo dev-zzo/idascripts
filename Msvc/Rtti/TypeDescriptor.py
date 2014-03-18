@@ -21,7 +21,7 @@ class TypeDescriptor :
 		
 		self.vtblAddress = IDAHacks.getUInt32(ea)
 		name = IDAHacks.getAsciiz(ea + 8) # FIXME: 64-bit
-		if name[:4] != ".?AV":
+		if name[:4] != ".?AV" and name[:4] != ".?AU":
 			raise RttiError.RttiError("TypeDescriptor.name does not start with '.?AV'.")
 		if name[-2:] != "@@":
 			raise RttiError.RttiError("TypeDescriptor.name does not end with '@@'.")
