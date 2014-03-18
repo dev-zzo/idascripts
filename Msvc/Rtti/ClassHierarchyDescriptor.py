@@ -8,7 +8,7 @@ class ClassHierarchyDescriptor :
 	"""
 	"""
 	
-	def __init__(self, rtti, ea) :
+	def __init__(self, ea) :
 		
 		self.ea = ea
 		
@@ -17,52 +17,52 @@ class ClassHierarchyDescriptor :
 		# unsigned int numBaseClasses;
 		# RTTIBaseClassArray *pBaseClassArray;
 		
-		self.attributes = idc.Dword(ea + 4)
-		self.baseClasses = []
-		baseCount = idc.Dword(ea + 8)
-		baseArray = None
-		if baseCount > 0 :
-			baseArray = idc.Dword(ea + 12)
-			basePtr = baseArray
-			while baseCount > 0 :
-				# Define base class descriptor
-				self.baseClasses.append(rtti.getBaseClassDescriptor2(idc.Dword(basePtr)))
-				basePtr += 4
-				baseCount -= 1
-			# Name the base class array
-			# ??_R2{class}@@8
-			IDAHacks.undefBytes(baseArray, baseCount * 4) # FIXME: 64-bitness
-			idc.MakeArray(baseArray, baseCount)
-			name = "??_R2" + self.__getClassName() + "@@8"
-			if name != idc.Name(baseArray) :
-				idc.MakeNameEx(baseArray, name, 0)
-		else :
-			print str(self) + ": no base class descriptors defined."
+		self.attributes = IDAHacks.getUInt32(ea + 4)
+		self.hasMultipleBases = (self.attributes & 1) != 0
+		self.hasVirtualBases = (self.attributes & 2) != 0
+		
+		baseCount = IDAHacks.getUInt32(ea + 8)
+		if baseCount == 0 :
+			raise RttiError.RttiError("ClassHierarchyDescriptor.numBaseClasses is zero.")
+			
+		self.baseTypeDescriptors = None
+		self.baseTypePtrs = []
+		self.baseArrayPtr = IDAHacks.getUInt32(ea + 12)
+		IDAHacks.undefBytes(self.baseArrayPtr, baseCount * 4) # FIXME: 64-bitness
+		
+		basePtr = self.baseArrayPtr
+		while baseCount > 0 :
+			self.baseTypePtrs.append(IDAHacks.getUInt32(basePtr))
+			idc.MakeDword(basePtr)
+			basePtr += 4
+			baseCount -= 1
 		
 		# Define data in DB
 		IDAHacks.undefBytes(ea, 16)
 		idc.MakeStructEx(ea, -1, "_s__RTTIClassHierarchyDescriptor")
-		
-		# Make a name, if not there
-		name = "??_R3" + self.__getClassName() + "@@8"
-		if name != idc.Name(ea) :
-			idc.MakeNameEx(ea, name, 0)
 	# End of __init__()
 	
 	def __str__(self) :
-		return "RTTI ClassHierarchyDescriptor at %08x" % (self.ea)
+		text = "RTTI ClassHierarchyDescriptor at %08x\n" % (self.ea)
+		inheritance = "MultipleInheritance" if self.hasMultipleBases else "SingleInheritance"
+		vbase = "VirtualInheritance" if self.hasVirtualBases else ""
+		text += "    Attributes: %s%s\n" % (inheritance, vbase)
+		text += "    BaseDescrs: %s\n" % (" ".join(map(lambda x : "%08x" % x, self.baseTypePtrs)))
+		return text
 	# End of __str__()
 	
-	def __getClassName(self) :
+	def resolve(self, rtti) :
 		"""
-		Obtain the class name this CHD relates to.
-		1) Use the xref from COL and get to TD.
-		2) Use base class array[0].
+		Resolve related objects via the RTTI db object.
 		"""
-		if self.baseClasses is not None and len(self.baseClasses) > 0 :
-			baseDesc = self.baseClasses[0]
-			return baseDesc.typeDescriptor.name
-		return None
+		
+		self.baseTypeDescriptors = [rtti.baseClassDescriptors[p] for p in self.baseTypePtrs]
+			
+		name = self.baseTypeDescriptors[0].typeDescriptor.nameMangled
+		idc.MakeNameEx(self.baseArrayPtr, "??_R2" + name + "8", 0)
+		idc.MakeNameEx(self.ea, "??_R3" + name + "8", 0)
+		pass
+	# End of resolve()
 #
 
 id = idc.GetStrucIdByName("_s__RTTIClassHierarchyDescriptor");

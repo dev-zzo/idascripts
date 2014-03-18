@@ -1,7 +1,6 @@
 import idc
 
 def toSigned(v, bits) :
-	print "%d/%d" % (v, bits)
 	if (v & (1 << (bits - 1))) != 0 :
 		return -((~v + 1) & ((1 << bits) - 1))
 	return v
@@ -45,3 +44,13 @@ def undefBytes(ea, length) :
 		idc.MakeUnkn(curr, 0)
 		curr += 1
 # End of undefBytes()
+
+def getSegBoundaries(segName) :
+	s = idc.FirstSeg();
+	while s != idc.BADADDR :
+		if idc.SegName(s) == segName :
+			return (s, idc.NextSeg(s))
+		s = idc.NextSeg(s)
+	return None
+# End of getSegBoundaries()
+

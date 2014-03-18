@@ -8,7 +8,7 @@ class TypeDescriptor :
 	"""
 	"""
 	
-	def __init__(self, rtti, ea) :
+	def __init__(self, ea) :
 		"""
 		Construct the TypeDescriptor object from the information at the given EA.
 		"""
@@ -19,31 +19,33 @@ class TypeDescriptor :
 		# void *spare;
 		# char name[];
 		
-		self.vtblAddress = idc.Dword(ea)
+		self.vtblAddress = IDAHacks.getUInt32(ea)
 		name = IDAHacks.getAsciiz(ea + 8) # FIXME: 64-bit
 		if name[:4] != ".?AV":
 			raise RttiError.RttiError("TypeDescriptor.name does not start with '.?AV'.")
 		if name[-2:] != "@@":
 			raise RttiError.RttiError("TypeDescriptor.name does not end with '@@'.")
-		# Cut extra chars: ".?AV" and "@@"
-		self.name = name[4:-2]
-		
+		# Cut extra chars: ".?AV"
+		self.nameMangled = name[4:]
+		# Use vftable mangling to convert this to a demangled form
+		self.name = idc.Demangle("??_7" + self.nameMangled + "6B@", 0x00004006)[:-11].strip()
+
 		# Define data in DB
 		length = 8 + len(name) + 1
 		IDAHacks.undefBytes(ea, length)
 		idc.MakeStructEx(ea, length, "_TypeDescriptor")
 		
-		# Make a name, if not there
-		name = "??_R0?AV" + self.name + "@@@8"
-		if name != idc.Name(ea) :
-			idc.MakeNameEx(ea, name, 0)
+		name = "??_R0?AV" + self.nameMangled + "@8"
+		idc.MakeNameEx(ea, name, 0)
+			
+		# TODO: handle align directives.
 	# End of __init__()
 	
 	def __str__(self) :
 		return "RTTI TypeDescriptor at %08x for `%s'" % (self.ea, self.name)
 	# End of __str__()
 	
-# End of MsvcRttiTypeDescriptor
+# End of TypeDescriptor
 
 id = idc.GetStrucIdByName("_TypeDescriptor")
 if id : idc.DelStruc(id)

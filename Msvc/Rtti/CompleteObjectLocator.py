@@ -11,7 +11,7 @@ class CompleteObjectLocator :
 	(since a class can have several of them).
 	"""
 	
-	def __init__(self, rtti, ea) :
+	def __init__(self, ea) :
 		"""
 		Construct the RTTICompleteObjectLocator object from the information at the given EA.
 		"""
@@ -24,24 +24,66 @@ class CompleteObjectLocator :
 		# TypeDescriptor *pTypeDescriptor; // TypeDescriptor of the complete class
 		# RTTIClassHierarchyDescriptor *pClassDescriptor; // describes inheritance hierarchy
 		
-		self.vftableOffset = idc.Dword(ea + 4)
-		self.cdOffset = idc.Dword(ea + 8)
-		self.typeDescriptor = rtti.getTypeDescriptor(idc.Dword(ea + 12))
-		self.classDescriptor = rtti.getClassHierarchyDescriptor(idc.Dword(ea + 16))
+		self.vftableOffset = IDAHacks.getUInt32(ea + 4)
+		self.cdOffset = IDAHacks.getUInt32(ea + 8)
+		self.typeDescriptorPtr = IDAHacks.getUInt32(ea + 12)
+		self.classDescriptorPtr = IDAHacks.getUInt32(ea + 16)
+		self.typeDescriptor = None
+		self.classDescriptor = None
+		self.relatedBaseType = None
 		
 		# Define data in DB
 		IDAHacks.undefBytes(ea, 20)
 		idc.MakeStructEx(ea, -1, "_s__RTTICompleteObjectLocator")
-		
-		# Make a name, if not there
-		name = "??_R4" + self.typeDescriptor.name + "@@6B@"
-		if name != idc.Name(ea) :
-			idc.MakeNameEx(ea, name, 0)
 	# End of __init__()
 	
 	def __str__(self) :
 		return "RTTI CompleteObjectLocator at %08x for `%s'" % (self.ea, self.typeDescriptor.name)
 	# End of __str__()
+	
+	def __getattr__(self, name) :
+		if name == "typeNameMangled" :
+			if self.typeDescriptor is not None :
+				return self.typeDescriptor.nameMangled
+			else :
+				return None
+		if name == "baseTypeNameMangled" :
+			if self.classDescriptor is not None :
+				return None # TODO
+			else :
+				return None
+		raise AttributeError
+	# End of __getattr__()
+	
+	def resolve(self, rtti) :
+		"""
+		Resolve related objects via the RTTI db object.
+		"""
+		
+		self.typeDescriptor = rtti.typeDescriptors[self.typeDescriptorPtr]
+		self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
+		
+		# Make a name, if not there
+		# The name of complete object locator depends on a lot of factors.
+		# Won't be that easy to figure this out right away.
+		# ??_R4 CC@@ 6B AA@@ @
+		if self.classDescriptor.hasMultipleBases :
+			# TODO: determine whether this search is robust enough.
+			for bcd in self.classDescriptor.baseTypeDescriptors :
+				if bcd.typeDescriptor != self.typeDescriptor and bcd.mdisp == self.vftableOffset :
+					self.relatedBaseType = bcd
+					break
+			else :
+				print "WARN: no matched offset for %s" % self
+				return
+			
+			name = "??_R4" + self.typeDescriptor.nameMangled + "6B"
+			name += bcd.typeDescriptor.nameMangled + "@"
+			idc.MakeNameEx(self.ea, name, 0)
+		else :
+			name = "??_R4" + self.typeDescriptor.nameMangled + "6B@"
+			idc.MakeNameEx(self.ea, name, 0)
+	# End of resolve()
 #
 
 id = idc.GetStrucIdByName("_s__RTTICompleteObjectLocator");

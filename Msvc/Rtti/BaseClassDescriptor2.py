@@ -13,22 +13,14 @@ def mangleNumber(num) :
 		sign = "?"
 		num = -num
 	numtext = hex(num).upper()[2:-1]
-	print numtext
 	numtext = sign + numtext.translate(string.maketrans('0123456789ABCDEF', 'ABCDEFGHIJKLMNOP')) + "@"
 	return numtext
 
 class BaseClassDescriptor2 :
 	"""
-		
-		struct PMD
-		{
-		  int mdisp;
-		  int pdisp;
-		  int vdisp;
-		};
 	"""
 	
-	def __init__(self, rtti, ea) :
+	def __init__(self, ea) :
 		
 		self.ea = ea
 		
@@ -38,26 +30,17 @@ class BaseClassDescriptor2 :
 		# unsigned int attributes;
 		# RTTIClassHierarchyDescriptor *pClassDescriptor;
 		
-		self.typeDescriptor = rtti.getTypeDescriptor(idc.Dword(ea))
+		self.typeDescriptorPtr = IDAHacks.getUInt32(ea)
 		baseCount = IDAHacks.getUInt32(ea + 4)
 		self.mdisp = IDAHacks.getInt32(ea + 8)
 		self.pdisp = IDAHacks.getInt32(ea + 12)
 		self.vdisp = IDAHacks.getInt32(ea + 16)
 		self.attributes = IDAHacks.getUInt32(ea + 20)
+		self.classDescriptorPtr = IDAHacks.getUInt32(ea + 24)
 		
 		# Define data in DB
 		IDAHacks.undefBytes(ea, 28)
 		idc.MakeStructEx(ea, -1, "_s__RTTIBaseClassDescriptor2")
-		
-		# Make a name, if not there
-		name = "??_R1"
-		name += mangleNumber(self.mdisp)
-		name += mangleNumber(self.pdisp)
-		name += mangleNumber(self.vdisp)
-		name += mangleNumber(self.attributes)
-		name += self.typeDescriptor.name + "@@8"
-		if name != idc.Name(ea) :
-			idc.MakeNameEx(ea, name, 0)
 	# End of __init__()
 	
 	def __str__(self) :
@@ -65,7 +48,21 @@ class BaseClassDescriptor2 :
 	# End of __str__()
 	
 	def resolve(self, rtti) :
-		self.classDescriptor = rtti.getClassHierarchyDescriptor(idc.Dword(self.ea + 24))
+		"""
+		Resolve related objects via the RTTI db object.
+		"""
+
+		self.typeDescriptor = rtti.typeDescriptors[self.typeDescriptorPtr]
+		self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
+		
+		# Make a name, if not there
+		name = "??_R1"
+		name += mangleNumber(self.mdisp)
+		name += mangleNumber(self.pdisp)
+		name += mangleNumber(self.vdisp)
+		name += mangleNumber(self.attributes)
+		name += self.typeDescriptor.nameMangled + "8"
+		idc.MakeNameEx(self.ea, name, 0)
 	# End of resolve()
 #
 
