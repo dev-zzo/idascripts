@@ -1,1 +1,1 @@
-from Msvc import MsvcInfoMsvcInfo = reload(MsvcInfo)print "dev_zzo's Uber MSVC Script!"m = MsvcInfo.MsvcInfo()
+from Msvc import MsvcInfoMsvcInfo = reload(MsvcInfo)print "*" * 40print "dev_zzo's Uber MSVC Script!"print "*" * 40m = MsvcInfo.MsvcInfo()print "Use `m' to refer to a spawned MsvcInfo instance."

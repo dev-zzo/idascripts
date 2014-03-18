@@ -86,7 +86,7 @@ def scan(rtti) :
 		
 		# Has to exist.
 		td = rtti.typeDescriptors[col.typeDescriptorPtr]
-		print "%08x: a vftable for `%s'" % (vft, td.name)
+		# print "%08x: a vftable for `%s'" % (vft, td.name)
 		cls = rtti.types[td.nameMangled]
 		cls.vftables.append(vft)
 		cls.completeObjectLocators.append(col)
@@ -113,4 +113,6 @@ def scan(rtti) :
 	
 	print "RttiScanner: resolving references."
 	rtti.resolve()
+	
+	print "RttiScanner: done here."
 # End of scan()
