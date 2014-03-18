@@ -59,7 +59,10 @@ class BaseClassDescriptor2 :
 		try :
 			self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
 		except KeyError as e:
-			raise RttiError.RttiError("RTTI BaseClassDescriptor2 at %08x: references an undefined ClassHierarchyDescriptor at %08x." % (self.ea, e.args[0]))
+			# raise RttiError.RttiError("RTTI BaseClassDescriptor2 at %08x: references an undefined ClassHierarchyDescriptor at %08x." % (self.ea, e.args[0]))
+			# Hmm, this happens when we have vftable-less abstract classes.
+			# Do nothing for now.
+			pass
 		
 		# Make a name, if not there
 		name = "??_R1"
