@@ -49,7 +49,7 @@ class CompleteObjectLocator :
 				return None
 		if name == "baseTypeNameMangled" :
 			if self.classDescriptor is not None :
-				return None # TODO
+				return self.relatedBaseType.typeDescriptor.nameMangled
 			else :
 				return None
 		raise AttributeError
@@ -60,8 +60,14 @@ class CompleteObjectLocator :
 		Resolve related objects via the RTTI db object.
 		"""
 		
-		self.typeDescriptor = rtti.typeDescriptors[self.typeDescriptorPtr]
-		self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
+		try :
+			self.typeDescriptor = rtti.typeDescriptors[self.typeDescriptorPtr]
+		except KeyError as e:
+			raise RttiError.RttiError("RTTI CompleteObjectLocator at %08x: references an undefined TypeDescriptor at %08x." % (self.ea, e.args[0]))
+		try :
+			self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
+		except KeyError as e:
+			raise RttiError.RttiError("RTTI CompleteObjectLocator at %08x: references an undefined ClassHierarchyDescriptor at %08x." % (self.ea, e.args[0]))
 		
 		# Make a name, if not there
 		# The name of complete object locator depends on a lot of factors.
@@ -78,7 +84,7 @@ class CompleteObjectLocator :
 				return
 			
 			name = "??_R4" + self.typeDescriptor.nameMangled + "6B"
-			name += bcd.typeDescriptor.nameMangled + "@"
+			name += self.relatedBaseType.typeDescriptor.nameMangled + "@"
 			idc.MakeNameEx(self.ea, name, 0)
 		else :
 			name = "??_R4" + self.typeDescriptor.nameMangled + "6B@"

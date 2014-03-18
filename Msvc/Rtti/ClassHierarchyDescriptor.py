@@ -56,14 +56,17 @@ class ClassHierarchyDescriptor :
 		Resolve related objects via the RTTI db object.
 		"""
 		
-		self.baseTypeDescriptors = [rtti.baseClassDescriptors[p] for p in self.baseTypePtrs]
+		try :
+			self.baseTypeDescriptors = [rtti.baseClassDescriptors[p] for p in self.baseTypePtrs]
+		except KeyError as e :
+			raise RttiError.RttiError("RTTI ClassHierarchyDescriptor at %08x: references an undefined BaseClassDescriptor2 at %08x." % (self.ea, e.args[0]))
 			
 		name = self.baseTypeDescriptors[0].typeDescriptor.nameMangled
 		idc.MakeNameEx(self.baseArrayPtr, "??_R2" + name + "8", 0)
 		idc.MakeNameEx(self.ea, "??_R3" + name + "8", 0)
 		pass
 	# End of resolve()
-#
+# End of ClassHierarchyDescriptor
 
 id = idc.GetStrucIdByName("_s__RTTIClassHierarchyDescriptor");
 if id : idc.DelStruc(id)
