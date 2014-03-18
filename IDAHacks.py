@@ -49,7 +49,7 @@ def getSegBoundaries(segName) :
 	s = idc.FirstSeg();
 	while s != idc.BADADDR :
 		if idc.SegName(s) == segName :
-			return (s, idc.NextSeg(s))
+			return (s, idc.SegEnd(s))
 		s = idc.NextSeg(s)
 	return None
 # End of getSegBoundaries()
