@@ -19,23 +19,48 @@ class TypeDescriptor :
 		# void *spare;
 		# char name[];
 		
+		# The address here is totally bogus. I wonder what this was used for.
 		self.vtblAddress = IDAHacks.getUInt32(ea)
+		
 		name = IDAHacks.getAsciiz(ea + 8) # FIXME: 64-bit
-		if name[:4] != ".?AV" and name[:4] != ".?AU":
-			raise RttiError.RttiError("TypeDescriptor.name does not start with '.?AV'.")
+		nameFullLength = len(name)
+		# Sanity checks.
 		if name[-2:] != "@@":
 			raise RttiError.RttiError("TypeDescriptor.name does not end with '@@'.")
-		# Cut extra chars: ".?AV"
-		self.nameMangled = name[4:]
+		# Remove the dot -- no use anyway.
+		name = name[1:]
+		if name[:3] == "?AV" :
+			self.kind = "class"
+			nameOffset = 3
+		elif name[:3] == "?AU" :
+			self.kind = "struct"
+			nameOffset = 3
+		elif name[:3] == "PAV" :
+			# .PAVRSAFunction@CryptoPP@@
+			self.kind = "pointer"
+			nameOffset = 3
+		elif name[:3] == "?AW" :
+			# .?AW4BlockPaddingScheme@BlockPaddingSchemeDef@CryptoPP@@
+			# TODO: what does that "4" mean?
+			self.kind = "enum"
+			nameOffset = 4
+		else :
+			raise RttiError.RttiError("TypeDescriptor.name is not recognised.")
+
+		# Cut extra chars that don't fit into the mangled name
+		self.nameMangled = name[nameOffset:]
 		# Use vftable mangling to convert this to a demangled form
+		# NOTE: may be incorrect.
 		self.name = idc.Demangle("??_7" + self.nameMangled + "6B@", 0x00004006)[:-11].strip()
 
 		# Define data in DB
-		length = 8 + len(name) + 1
+		length = 8 + nameFullLength + 1
 		IDAHacks.undefBytes(ea, length)
 		idc.MakeStructEx(ea, length, "_TypeDescriptor")
 		
-		name = "??_R0?AV" + self.nameMangled + "@8"
+		# Use the full name with the starting "?A" here.
+		# IDA is able to demangle it properly.
+		name = "??_R0" + name + "@8"
 		idc.MakeNameEx(ea, name, 0)
 			
 		# TODO: handle align directives.
@@ -44,6 +69,15 @@ class TypeDescriptor :
 	def __str__(self) :
 		return "RTTI TypeDescriptor at %08x for `%s'" % (self.ea, self.name)
 	# End of __str__()
+	
+	@staticmethod
+	def isMaybeTypeName(v) :
+		"""
+		Check that the value v can be a beginning of a type name.
+		"""
+		# ".?AV", ".PAV", ".?AU", ".PAU", ".?AW"
+		return v == 0x56413F2E or v == 0x5641502E or v == 0x55413F2E or v == 0x5541502E or v == 0x57413F2E
+	# End of isValidSignature()
 	
 # End of TypeDescriptor
 

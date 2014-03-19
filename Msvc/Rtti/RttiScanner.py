@@ -27,13 +27,14 @@ def findTypeDescriptorCandidates() :
 	ea = dataBounds[0] + 8
 	while ea < dataBounds[1] :
 		# if (ea % 0x2000) == 0 : print "At %08x" % ea
-		v = IDAHacks.getUInt32(ea)
-		if (v == 0x56413F2E or v == 0x55413F2E) and IDAHacks.getUInt32(ea - 4) == 0 :
-			# Note: this check can potentially be skipped...
-			vfptr = IDAHacks.getUInt32(ea - 8)
-			if rdataBounds[0] <= vfptr < rdataBounds[1] :
-				# print "Found candidate @%08x" % (ea - 8)
-				results.append(ea - 8)
+		if IDAHacks.getUInt32(ea - 4) == 0 :
+			v = IDAHacks.getUInt32(ea)
+			if TypeDescriptor.TypeDescriptor.isMaybeTypeName(v) :
+				# Note: this check can potentially be skipped...
+				vfptr = IDAHacks.getUInt32(ea - 8)
+				if rdataBounds[0] <= vfptr < rdataBounds[1] :
+					# print "Found candidate @%08x" % (ea - 8)
+					results.append(ea - 8)
 		ea += 4
 	
 	return results
@@ -67,7 +68,7 @@ def findVftableCandidates() :
 # End of findVftableCandidates()
 
 def scan(rtti) :
-	print "RttiScanner: scanning for RTTI type descriptors."
+	print "RttiScanner: scanning for RTTI type descriptors (takes a while)."
 	tds = findTypeDescriptorCandidates()
 	for ea in tds :
 		x = TypeDescriptor.TypeDescriptor(ea)
@@ -77,7 +78,7 @@ def scan(rtti) :
 		c = RttiInfo.TypeInfo(x)
 		rtti.types[x.nameMangled] = c
 	
-	print "RttiScanner: scanning for vftables."
+	print "RttiScanner: scanning for vftables (takes a while)."
 	vftables = findVftableCandidates()
 	
 	print "RttiScanner: processing vftables."
