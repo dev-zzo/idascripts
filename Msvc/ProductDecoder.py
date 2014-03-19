@@ -5,6 +5,7 @@
 
 import struct
 import idc
+import os
 
 class ProductId :
 	"""
