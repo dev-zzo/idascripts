@@ -31,7 +31,7 @@ class BaseClassDescriptor2 :
 		# RTTIClassHierarchyDescriptor *pClassDescriptor;
 		
 		self.typeDescriptorPtr = IDAHacks.getUInt32(ea)
-		baseCount = IDAHacks.getUInt32(ea + 4)
+		self.numContainedBases = IDAHacks.getUInt32(ea + 4)
 		self.mdisp = IDAHacks.getInt32(ea + 8)
 		self.pdisp = IDAHacks.getInt32(ea + 12)
 		self.vdisp = IDAHacks.getInt32(ea + 16)

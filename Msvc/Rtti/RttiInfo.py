@@ -16,8 +16,8 @@ class TypeInfo :
 	"""
 	def __init__(self, td) :
 		self.nameMangled = td.nameMangled
-		self.vftables = []
 		self.typeDescriptor = td
+		self.vftables = []
 		self.completeObjectLocators = []
 		self.classHierarchyDescriptor = None
 	# End of __init__()
@@ -55,5 +55,6 @@ class RttiInfo :
 				colName = idc.Name(IDAHacks.getUInt32(vfptr - 4))
 				idc.MakeName(vfptr, "??_7" + colName[5:])
 	# End of resolve()
+	
 # End of Rtti
 

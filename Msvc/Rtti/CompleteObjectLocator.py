@@ -73,7 +73,7 @@ class CompleteObjectLocator :
 		# The name of complete object locator depends on a lot of factors.
 		# Won't be that easy to figure this out right away.
 		# ??_R4 CC@@ 6B AA@@ @
-		if self.classDescriptor.hasMultipleBases :
+		if self.classDescriptor.usesMultipleInheritance :
 			# TODO: determine whether this search is robust enough.
 			for bcd in self.classDescriptor.baseTypeDescriptors :
 				if bcd.typeDescriptor != self.typeDescriptor and bcd.mdisp == self.vftableOffset :

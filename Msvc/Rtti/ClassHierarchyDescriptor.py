@@ -4,6 +4,19 @@ import RttiError
 IDAHacks = reload(IDAHacks)
 RttiError = reload(RttiError)
 
+class ClassHierarchyNode :
+	"""
+	This class is constructed from a BaseClassDescriptor object.
+	"""
+	def __init__(self, bcd) :
+		self.typeDescriptor = bcd.typeDescriptor
+		self.mdisp = bcd.mdisp
+		self.pdisp = bcd.pdisp
+		self.vdisp = bcd.vdisp
+		self.containedBases = [] # objects of the same type
+	pass
+# End of ClassHierarchyNode
+
 class ClassHierarchyDescriptor :
 	"""
 	"""
@@ -18,8 +31,9 @@ class ClassHierarchyDescriptor :
 		# RTTIBaseClassArray *pBaseClassArray;
 		
 		self.attributes = IDAHacks.getUInt32(ea + 4)
-		self.hasMultipleBases = (self.attributes & 1) != 0
-		self.hasVirtualBases = (self.attributes & 2) != 0
+		# NOTE: baseCount can be greater than expected 2 with single inheritance.
+		self.usesMultipleInheritance = (self.attributes & 1) != 0
+		self.usesVirtualInheritance = (self.attributes & 2) != 0
 		
 		baseCount = IDAHacks.getUInt32(ea + 8)
 		if baseCount == 0 :
@@ -44,8 +58,8 @@ class ClassHierarchyDescriptor :
 	
 	def __str__(self) :
 		text = "RTTI ClassHierarchyDescriptor at %08x\n" % (self.ea)
-		inheritance = "MultipleInheritance" if self.hasMultipleBases else "SingleInheritance"
-		vbase = "VirtualInheritance" if self.hasVirtualBases else ""
+		inheritance = "MultipleInheritance" if self.usesMultipleInheritance else "SingleInheritance"
+		vbase = "VirtualInheritance" if self.usesVirtualInheritance else ""
 		text += "    Attributes: %s%s\n" % (inheritance, vbase)
 		text += "    BaseDescrs: %s\n" % (" ".join(map(lambda x : "%08x" % x, self.baseTypePtrs)))
 		return text
@@ -60,12 +74,30 @@ class ClassHierarchyDescriptor :
 			self.baseTypeDescriptors = [rtti.baseClassDescriptors[p] for p in self.baseTypePtrs]
 		except KeyError as e :
 			raise RttiError.RttiError("RTTI ClassHierarchyDescriptor at %08x: references an undefined BaseClassDescriptor2 at %08x." % (self.ea, e.args[0]))
+		self.hierarchy = self.parseHierarchy(0, 0)
 			
 		name = self.baseTypeDescriptors[0].typeDescriptor.nameMangled
 		idc.MakeNameEx(self.baseArrayPtr, "??_R2" + name + "8", 0)
 		idc.MakeNameEx(self.ea, "??_R3" + name + "8", 0)
 		pass
 	# End of resolve()
+	
+	def parseHierarchy(self, index, depth) :
+		# Get self
+		bcd = self.baseTypeDescriptors[index]
+		numContainedBases = bcd.numContainedBases
+		limit = index + numContainedBases + 1
+		
+		me = ClassHierarchyNode(bcd)
+		print "  " * depth + me.typeDescriptor.name + (" (%d bases)" % (numContainedBases))
+		
+		index += 1
+		while index < limit :
+			other = self.parseHierarchy(index, depth + 1)
+			me.containedBases.append(other)
+			index += self.baseTypeDescriptors[index].numContainedBases + 1
+		return me
+	# End of parseHierarchy()
 # End of ClassHierarchyDescriptor
 
 id = idc.GetStrucIdByName("_s__RTTIClassHierarchyDescriptor");
