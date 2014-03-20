@@ -67,6 +67,29 @@ def findVftableCandidates() :
 	return results
 # End of findVftableCandidates()
 
+def resolveBCD(bcdPtr, rtti) :
+	try :
+		bcd = rtti.baseClassDescriptors[bcdPtr]
+	except :
+		bcd = BaseClassDescriptor2.BaseClassDescriptor2(bcdPtr)
+		print bcd
+		rtti.baseClassDescriptors[bcdPtr] = bcd
+		resolveCHD(bcd.classDescriptorPtr, rtti)
+	return bcd
+# End of resolveBCD()
+
+def resolveCHD(chdPtr, rtti) :
+	try :
+		chd = rtti.classHierarchyDescriptors[chdPtr]
+	except :
+		chd = ClassHierarchyDescriptor.ClassHierarchyDescriptor(chdPtr)
+		print chd
+		rtti.classHierarchyDescriptors[chdPtr] = chd
+		for bcdPtr in chd.baseTypePtrs :
+			bcd = resolveBCD(bcdPtr, rtti)
+	return chd
+# End of resolveCHD()
+
 def scan(rtti) :
 	print "RttiScanner: scanning for RTTI type descriptors (takes a while)."
 	tds = findTypeDescriptorCandidates()
@@ -96,23 +119,7 @@ def scan(rtti) :
 		
 		# Work around the Class Hierarchy Descriptor object
 		chdPtr = col.classDescriptorPtr
-		try :
-			chd = rtti.classHierarchyDescriptors[chdPtr]
-		except :
-			chd = ClassHierarchyDescriptor.ClassHierarchyDescriptor(chdPtr)
-			print chd
-			rtti.classHierarchyDescriptors[chdPtr] = chd
-			cls.classHierarchyDescriptor = chd
-			for bcdPtr in chd.baseTypePtrs :
-				try :
-					bcd = rtti.baseClassDescriptors[bcdPtr]
-				except :
-					bcd = BaseClassDescriptor2.BaseClassDescriptor2(bcdPtr)
-					print bcd
-					rtti.baseClassDescriptors[bcdPtr] = bcd
-					#bcd.resolve(rtti)
-			#chd.resolve(rtti)
-		#col.resolve(rtti)
+		cls.classHierarchyDescriptor = resolveCHD(chdPtr, rtti)
 	
 	print "RttiScanner: resolving references."
 	rtti.resolve()
