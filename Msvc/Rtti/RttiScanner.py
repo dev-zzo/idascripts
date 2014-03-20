@@ -59,7 +59,9 @@ def findVftableCandidates() :
 		if (rdataBounds[0] <= colPtr < rdataBounds[1]) and (textBounds[0] <= vfuncPtr < textBounds[1]) :
 			# Check that this is really a complete object locator.
 			tdPtr = IDAHacks.getUInt32(colPtr + 12)
-			if IDAHacks.getUInt32(tdPtr + 8) == 0x56413F2E :
+			# The check can use the existing TypeDescriptor DB from RTTI...
+			v = IDAHacks.getUInt32(tdPtr + 8)
+			if TypeDescriptor.TypeDescriptor.isMaybeTypeName(v) :
 				ea += 4
 				results.append(ea)
 		ea += 4
