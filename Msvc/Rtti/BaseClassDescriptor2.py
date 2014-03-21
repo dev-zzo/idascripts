@@ -35,6 +35,8 @@ class BaseClassDescriptor2 :
 		self.mdisp = IDAHacks.getInt32(ea + 8)
 		self.pdisp = IDAHacks.getInt32(ea + 12)
 		self.vdisp = IDAHacks.getInt32(ea + 16)
+                # 0x10 = virtual base
+                # 0x40 = ???
 		self.attributes = IDAHacks.getUInt32(ea + 20)
 		self.classDescriptorPtr = IDAHacks.getUInt32(ea + 24)
 		
