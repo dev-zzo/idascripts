@@ -11,7 +11,7 @@ RttiInfo = reload(RttiInfo)
 import IDAHacks
 IDAHacks = reload(IDAHacks)
 
-def findTypeDescriptorCandidates() :
+def findTypeDescriptorCandidates(searchBounds, vfptrBounds) :
 	"""
 	Locate any candidates for a type descriptor object.
 	Detected by the pattern: {pointer} {0} ".?AV"
@@ -19,26 +19,33 @@ def findTypeDescriptorCandidates() :
 	
 	results = []
 	
-	# The objects are defined within the .data section usually.
-	dataBounds = IDAHacks.getSegBoundaries(".data")
-	# vfptr offsets are into the .rdata section.
-	rdataBounds = IDAHacks.getSegBoundaries(".rdata")
-	
-	ea = dataBounds[0] + 8
-	while ea < dataBounds[1] :
+	ea = searchBounds[0]
+	while ea < searchBounds[1] - 8 :
 		# if (ea % 0x2000) == 0 : print "At %08x" % ea
-		if IDAHacks.getUInt32(ea - 4) == 0 :
-			v = IDAHacks.getUInt32(ea)
+		if IDAHacks.getUInt32(ea + 4) == 0 :
+			v = IDAHacks.getUInt32(ea + 8)
 			if TypeDescriptor.TypeDescriptor.isMaybeTypeName(v) :
 				# Note: this check can potentially be skipped...
-				vfptr = IDAHacks.getUInt32(ea - 8)
-				if rdataBounds[0] <= vfptr < rdataBounds[1] :
-					# print "Found candidate @%08x" % (ea - 8)
-					results.append(ea - 8)
+				vfptr = IDAHacks.getUInt32(ea)
+				if vfptrBounds[0] <= vfptr < vfptrBounds[1] :
+					# print "Found candidate @%08x" % (ea)
+					results.append(ea)
 		ea += 4
-	
 	return results
 # End of findTypeDescriptorCandidates()
+
+def processTypeDescriptors(rtti) :
+	# The objects are defined within the .data section usually.
+	# vfptr offsets are into the .rdata section.
+	dataBounds = IDAHacks.getSegBoundaries(".data")
+	rdataBounds = IDAHacks.getSegBoundaries(".rdata")
+	tds = findTypeDescriptorCandidates(dataBounds, rdataBounds)
+	for ea in tds :
+		x = TypeDescriptor.TypeDescriptor(ea)
+		rtti.typeDescriptors[ea] = x
+                print x
+		c = RttiInfo.TypeInfo(x)
+		rtti.types[x.nameMangled] = c
 
 def findVftableCandidates() :
 	"""
@@ -94,14 +101,7 @@ def resolveCHD(chdPtr, rtti) :
 
 def scan(rtti) :
 	print "RttiScanner: scanning for RTTI type descriptors (takes a while)."
-	tds = findTypeDescriptorCandidates()
-	for ea in tds :
-		x = TypeDescriptor.TypeDescriptor(ea)
-		rtti.typeDescriptors[ea] = x
-		print x
-		
-		c = RttiInfo.TypeInfo(x)
-		rtti.types[x.nameMangled] = c
+	processTypeDescriptors(rtti)
 	
 	print "RttiScanner: scanning for vftables (takes a while)."
 	vftables = findVftableCandidates()

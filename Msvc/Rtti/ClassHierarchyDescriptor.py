@@ -101,9 +101,10 @@ class ClassHierarchyDescriptor :
 # End of ClassHierarchyDescriptor
 
 id = idc.GetStrucIdByName("_s__RTTIClassHierarchyDescriptor");
-if id : idc.DelStruc(id)
-id = idc.AddStrucEx(-1, "_s__RTTIClassHierarchyDescriptor", 0);
-idc.AddStrucMember(id,"signature",	0,	0x20000400,	-1,	4);
-idc.AddStrucMember(id,"attributes",	0X4,	0x20000400,	-1,	4);
-idc.AddStrucMember(id,"numBaseClasses",	0X8,	0x20000400,	-1,	4);
-idc.AddStrucMember(id,"pBaseClassArray",	0XC,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
+if id == 4294967295 :
+        print "Defining _s__RTTIClassHierarchyDescriptor struct."
+        id = idc.AddStrucEx(-1, "_s__RTTIClassHierarchyDescriptor", 0);
+        idc.AddStrucMember(id,"signature",	0,	0x20000400,	-1,	4);
+        idc.AddStrucMember(id,"attributes",	0X4,	0x20000400,	-1,	4);
+        idc.AddStrucMember(id,"numBaseClasses",	0X8,	0x20000400,	-1,	4);
+        idc.AddStrucMember(id,"pBaseClassArray",	0XC,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);

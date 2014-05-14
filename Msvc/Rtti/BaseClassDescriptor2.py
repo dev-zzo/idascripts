@@ -54,10 +54,24 @@ class BaseClassDescriptor2 :
 		Resolve related objects via the RTTI db object.
 		"""
 
+		print "Trying TD."
 		try :
 			self.typeDescriptor = rtti.typeDescriptors[self.typeDescriptorPtr]
 		except KeyError as e:
+			print "Not found. :-("
 			raise RttiError.RttiError("RTTI BaseClassDescriptor2 at %08x: references an undefined TypeDescriptor at %08x." % (self.ea, e.args[0]))
+		
+		# Make a name, if not there
+		print "Making a name."
+		name = "??_R1"
+		name += mangleNumber(self.mdisp)
+		name += mangleNumber(self.pdisp)
+		name += mangleNumber(self.vdisp)
+		name += mangleNumber(self.attributes)
+		name += self.typeDescriptor.nameMangled + "8"
+		idc.MakeNameEx(self.ea, name, 0)
+		
+		print "Trying CHD."
 		try :
 			self.classDescriptor = rtti.classHierarchyDescriptors[self.classDescriptorPtr]
 		except KeyError as e:
@@ -66,25 +80,17 @@ class BaseClassDescriptor2 :
 			# Hmm, this happens when we have vftable-less abstract classes.
 			# Do nothing for now.
 			pass
-		
-		# Make a name, if not there
-		name = "??_R1"
-		name += mangleNumber(self.mdisp)
-		name += mangleNumber(self.pdisp)
-		name += mangleNumber(self.vdisp)
-		name += mangleNumber(self.attributes)
-		name += self.typeDescriptor.nameMangled + "8"
-		idc.MakeNameEx(self.ea, name, 0)
 	# End of resolve()
 # End of BaseClassDescriptor2
 
 id = idc.GetStrucIdByName("_s__RTTIBaseClassDescriptor2");
-if id : idc.DelStruc(id)
-id = idc.AddStrucEx(-1, "_s__RTTIBaseClassDescriptor2", 0);
-idc.AddStrucMember(id,"pTypeDescriptor",	0,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
-idc.AddStrucMember(id,"numContainedBases",	0X4,	0x20000400,	-1,	4);
-idc.AddStrucMember(id,"mdisp",	0X8,	0x20200400,	-1,	4);
-idc.AddStrucMember(id,"pdisp",	0XC,	0x20200400,	-1,	4);
-idc.AddStrucMember(id,"vdisp",	0X10,	0x20200400,	-1,	4);
-idc.AddStrucMember(id,"attributes",	0X14,	0x20000400,	-1,	4);
-idc.AddStrucMember(id,"pClassDescriptor",	0X18,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
+if id == 4294967295 :
+        print "Defining _s__RTTIBaseClassDescriptor2 struct."
+	id = idc.AddStrucEx(-1, "_s__RTTIBaseClassDescriptor2", 0);
+	idc.AddStrucMember(id,"pTypeDescriptor",	0,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
+	idc.AddStrucMember(id,"numContainedBases",	0X4,	0x20000400,	-1,	4);
+	idc.AddStrucMember(id,"mdisp",	0X8,	0x20200400,	-1,	4);
+	idc.AddStrucMember(id,"pdisp",	0XC,	0x20200400,	-1,	4);
+	idc.AddStrucMember(id,"vdisp",	0X10,	0x20200400,	-1,	4);
+	idc.AddStrucMember(id,"attributes",	0X14,	0x20000400,	-1,	4);
+	idc.AddStrucMember(id,"pClassDescriptor",	0X18,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);

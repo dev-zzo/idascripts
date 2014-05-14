@@ -82,8 +82,9 @@ class TypeDescriptor :
 # End of TypeDescriptor
 
 id = idc.GetStrucIdByName("_TypeDescriptor")
-if id : idc.DelStruc(id)
-id = idc.AddStrucEx(-1, "_TypeDescriptor", 0);
-idc.AddStrucMember(id, "pVFTable",	0,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
-idc.AddStrucMember(id, "spare",	0X4,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
-idc.AddStrucMember(id, "name",	0X8,	0x50000400,	idc.ASCSTR_C,	0);
+if id == 4294967295 :
+        print "Defining _TypeDescriptor struct."
+	id = idc.AddStrucEx(-1, "_TypeDescriptor", 0);
+	idc.AddStrucMember(id, "pVFTable",	0,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
+	idc.AddStrucMember(id, "spare",	0X4,	0x25500400,	0XFFFFFFFF,	4,	0XFFFFFFFF,	0,	0x000002);
+	idc.AddStrucMember(id, "name",	0X8,	0x50000400,	idc.ASCSTR_C,	0);
