@@ -1,7 +1,15 @@
 import idc
 import idaapi
+import idautils
 import string
 from IDAHacks import *
+
+#
+# References:
+#
+# http://www.openrce.org/articles/full_view/23
+# 
+#
 
 class RttiError(Exception) :
     def __init__(self, msg) :
@@ -120,7 +128,7 @@ class TypeDescriptor :
     typeNameMarkers = (0x56413F2E, 0x5641502E, 0x55413F2E, 0x5541502E, 0x54413F2E, 0x5441502E, 0x57413F2E, 0x5841502E)
     
     @staticmethod
-    def isTypeDescriptor(ea) :
+    def isValid(ea) :
         """
         See if this looks like a type descriptor.
         """
@@ -130,6 +138,10 @@ class TypeDescriptor :
         if idaapi.get_full_long(ea + 4) != 0 :
             return False
         if idaapi.get_full_long(ea + 8) not in TypeDescriptor.typeNameMarkers :
+            return False
+        try :
+            name = TypeDescriptor.makeName(ea)
+        except :
             return False
         return True
     
@@ -155,12 +167,8 @@ class TypeDescriptor :
     def define(ea) :
         if TypeDescriptor.isDefined(ea) :
             return
-
-        print "%08X: defining TypeDescriptor" % ea
-        if idaapi.get_full_long(ea + 4) != 0 :
-            raise RttiError("%08X: spare not zero; doesn't look like a correct TypeDescriptor" % (ea))
-        if not TypeDescriptor.isTypeDescriptor(ea) :
-            raise RttiError("%08X: This doesn't look like a type descriptor." % ea)
+        if not TypeDescriptor.isValid(ea) :
+            raise RttiError("%08X: This doesn't look like a TypeDescriptor." % ea)
 
         # FIXME: 64-bit compatibility
         mangledName = getAsciiz(ea + 8)
@@ -184,7 +192,7 @@ class TypeDescriptor :
         lastEa = searchBounds[1] - 8
         while ea < lastEa :
             # if (ea & 0x1FFF) == 0 : print "At %08x" % ea
-            if TypeDescriptor.isTypeDescriptor(ea) :
+            if TypeDescriptor.isValid(ea) :
                 # print "Found candidate @%08x" % (ea)
                 results.append(ea)
                 ea += 8
@@ -240,7 +248,20 @@ class ClassHierarchyDescriptor :
             bcdEas = ClassHierarchyDescriptor.getBcdEaList(self.ea)
             self.cachedBaseList = [BaseClassDescriptor(bcdEa) for bcdEa in bcdEas]
         return self.cachedBaseList
-        
+
+    @staticmethod
+    def isValid(ea) :
+        if idaapi.get_full_long(ea) != 0 :
+            return False
+        attrs = idaapi.get_full_long(ea + 4)
+        if attrs > 3 :
+            return False
+        baseCount = idaapi.get_full_long(ea + 8)
+        if baseCount > 1024 :
+            return False
+        # TODO: add sanity checks.
+        return True
+
     @staticmethod
     def getBcdEaList(ea) :
         baseCount = idaapi.get_full_long(ea + 8)
@@ -261,21 +282,16 @@ class ClassHierarchyDescriptor :
     def define(ea) :
         if ClassHierarchyDescriptor.isDefined(ea) :
             return
-        
-        if idaapi.get_full_long(ea) != 0 :
-            raise RttiError("%08X: signature not zero; doesn't look like a correct ClassHierarchyDescriptor" % (ea))
-        # TODO: more sanity checks
+        print '%08X' % ea
+        if not ClassHierarchyDescriptor.isValid(ea) :
+            raise RttiError("%08X: Doesn't look like a correct ClassHierarchyDescriptor" % ea)
 
-        print "%08X: defining ClassHierarchyDescriptor" % ea
         strid = idaapi.get_struc_id('_s__RTTIClassHierarchyDescriptor')
         size = idaapi.get_struc_size(strid)
         idaapi.do_unknown_range(ea, size, idaapi.DOUNK_DELNAMES)
         idaapi.doStruct(ea, size, strid)
 
         baseCount = idaapi.get_full_long(ea + 8)
-        if baseCount == 0 or baseCount > 256 :
-            raise RttiError('%08X: Bogus base class count value: %d' % (ea, baseCount))
-
         # FIXME: 64-bit compatibility
         baseArrayEa = idaapi.get_full_long(ea + 12)
         idaapi.do_unknown_range(baseArrayEa, baseCount * 4, idaapi.DOUNK_DELNAMES)
@@ -347,9 +363,15 @@ class BaseClassDescriptor :
     @property
     def attributes(self) :
         return idaapi.get_full_long(self.ea + 20)
+    
+    @property
+    def isVersion2(self) :
+        return (self.attributes & 0x40) != 0
 
     @property
     def classHierarchyDescriptor(self) :
+        if not self.isVersion2 :
+            raise NotImplementedError('No Class Hierarchy Descriptor reference available in V1 structures.')
         chd = idaapi.get_full_long(self.ea + 24)
         return ClassHierarchyDescriptor(chd)
         
@@ -371,9 +393,14 @@ class BaseClassDescriptor :
         at = idaapi.get_full_long(ea)
         TypeDescriptor.define(at)
 
-        print "%08X: defining BaseClassDescriptor" % ea
-        # TODO: fix compiler variations.
-        strid = idaapi.get_struc_id('_s__RTTIBaseClassDescriptor2')
+        attrs = idaapi.get_full_long(ea + 20)
+        if attrs != 0 and attrs != 0x40 :
+            raise RttiError('%08X: Suspicious attributes value: %08X' % (ea, attrs))
+        isV2 = (attrs & 0x40) != 0
+        if isV2 :
+            strid = idaapi.get_struc_id('_s__RTTIBaseClassDescriptor2')
+        else :
+            strid = idaapi.get_struc_id('_s__RTTIBaseClassDescriptor')
         size = idaapi.get_struc_size(strid)
         idaapi.do_unknown_range(ea, size, idaapi.DOUNK_DELNAMES)
         idaapi.doStruct(ea, size, strid)
@@ -386,8 +413,9 @@ class BaseClassDescriptor :
         name += TypeDescriptor(idaapi.get_full_long(ea)).baseMangledName + '8'
         idaapi.set_name(ea, name, 0)
 
-        at = idaapi.get_full_long(ea + 16)
-        ClassHierarchyDescriptor.define(at)
+        if isV2 :
+            at = idaapi.get_full_long(ea + 24)
+            ClassHierarchyDescriptor.define(at)
 
 #
 # _s__RTTICompleteObjectLocator handling.
@@ -434,6 +462,24 @@ class CompleteObjectLocator :
         return ClassHierarchyDescriptor(at)
 
     @staticmethod
+    def isValid(ea) :
+        # Signature field must be zero
+        if idaapi.get_full_long(ea) != 0 :
+            # print "Signature fail"
+            return False
+        # At offset 12, there should be a pointer to a valid TypeDescriptor
+        tdPtr = idaapi.get_full_long(ea + 12)
+        if not TypeDescriptor.isValid(tdPtr) :
+            # print "TD fail"
+            return False
+        # At offset 16, there should be a pointer to a valid ClassHierarchyDescriptor
+        chdPtr = idaapi.get_full_long(ea + 16)
+        if not ClassHierarchyDescriptor.isValid(chdPtr) :
+            # print "CHD fail"
+            return False
+        return True
+
+    @staticmethod
     def isDefined(ea) :
         flags = idaapi.getFlags(ea)
         if not idc.isStruct(flags) :
@@ -447,23 +493,28 @@ class CompleteObjectLocator :
     def define(ea) :
         if CompleteObjectLocator.isDefined(ea) :
             return
-
-        if idaapi.get_full_long(ea) != 0 :
-            raise RttiError("%08X: signature not zero; doesn't look like a correct CompleteObjectLocator" % (ea))
-        # TODO: more sanity checks
+        if not CompleteObjectLocator.isValid(ea) :
+            raise RttiError("%08X: doesn't look like a correct CompleteObjectLocator" % (ea))
 
         # Ensure referenced structs are defined.
         # An exception will be thrown if something goes wrong.
-        at = idaapi.get_full_long(ea + 12)
-        TypeDescriptor.define(at)
-        at = idaapi.get_full_long(ea + 16)
-        ClassHierarchyDescriptor.define(at)
+        tdPtr = idaapi.get_full_long(ea + 12)
+        td = TypeDescriptor(tdPtr)
+        chdPtr = idaapi.get_full_long(ea + 16)
+        chd = ClassHierarchyDescriptor(chdPtr)
 
-        print "%08X: defining CompleteObjectLocator" % ea
         strid = idaapi.get_struc_id('_s__RTTICompleteObjectLocator')
         size = idaapi.get_struc_size(strid)
         idaapi.do_unknown_range(ea, size, idaapi.DOUNK_DELNAMES)
         idaapi.doStruct(ea, size, strid)
+        
+        if chd.isMultipleInheritance :
+            if chd.isVirtualInheritance :
+                print '%08X: Cannot handle virtual inheritance yet.' % (ea)
+            else :
+                print '%08X: Cannot handle multiple inheritance yet.' % (ea)
+        else :
+            idaapi.set_name(ea, '??_R4' + td.baseMangledName + '6B@', 0)
         
 #
 # Integrated scanner
@@ -478,6 +529,17 @@ def scanRtti() :
     print "Scanning for TypeDescriptors (might take a while)..."
     tds = TypeDescriptor.findAll(dataBounds)
     print "Found %d descriptor(s)." % len(tds)
+    
+    print "Scanning TypeDescriptors for CompleteObjectLocator refs..."
     for ea in tds :
         x = TypeDescriptor(ea)
         print x
+        for xref in idautils.DataRefsTo(ea) :
+            try :
+                # Correct the address.
+                xref -= 12
+                col = CompleteObjectLocator(xref)
+                print col
+            except Exception, e:
+                # print e
+                pass
