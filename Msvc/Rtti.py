@@ -344,6 +344,8 @@ class BaseClassArray :
         idaapi.do_unknown_range(ea, count * 4, idaapi.DOUNK_DELNAMES)
         idaapi.doDwrd(ea, 4)
         idaapi.do_data_ex(ea, idaapi.getFlags(ea), count * 4, idaapi.BADADDR)
+        # TODO: rewrite into idaapi calls
+        idc.SetArrayFormat(ea, idc.AP_INDEX|idc.AP_IDXDEC, 1, 0)
         
         # Entry 0 describes the class itself => I can find out the class name.
         bcd = BaseClassDescriptor(idaapi.get_full_long(ea))
@@ -565,6 +567,8 @@ class CompleteObjectLocator :
             if chd.isVirtualInheritance :
                 print '%08X: Cannot handle virtual inheritance yet.' % (ea)
             else :
+                # '??_R4' + td.baseMangledName + '6B' + baseClassTd.baseMangledName + '@'
+                # '??_7'  + ...
                 print '%08X: Cannot handle multiple inheritance yet.' % (ea)
         else :
             idaapi.set_name(ea, '??_R4' + td.baseMangledName + '6B@', 0)
