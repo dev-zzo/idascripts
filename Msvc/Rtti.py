@@ -2,6 +2,7 @@ import idc
 import idaapi
 import idautils
 import string
+import traceback
 from IDAHacks import *
 
 #
@@ -95,7 +96,7 @@ class TypeDescriptor :
     def __init__(self, ea) :
         self.ea = ea
         TypeDescriptor.define(ea)
-    
+
     def __eq__(self, other) :
         if type(other) is not type(self) :
             return False
@@ -124,9 +125,14 @@ class TypeDescriptor :
     def typeName(self) :
         return idaapi.demangle_name('?x@@3' + self.mangledName + 'A', 0)[:-2]
     
+    @property
+    def isClassType(self) :
+        marker = self.mangledName[:3]
+        return marker in ('?AU', '?AV')
+
     # ".?AV", ".PAV", ".?AU", ".PAU", ".?AT", ".PAT" ".?AW" ".PAX"
     typeNameMarkers = (0x56413F2E, 0x5641502E, 0x55413F2E, 0x5541502E, 0x54413F2E, 0x5441502E, 0x57413F2E, 0x5841502E)
-    
+
     @staticmethod
     def isValid(ea) :
         """
@@ -144,14 +150,14 @@ class TypeDescriptor :
         except :
             return False
         return True
-    
+
     @staticmethod
     def makeName(ea) :
         locName = '??_R0' + getAsciiz(ea + 9) + '@8'
         if idaapi.demangle_name(locName, 0) == '' :
             raise RttiError("%08X: Location name failed to properly demangle: `%s'" % (ea, locName))
         return locName
-        
+
     @staticmethod
     def isDefined(ea) :
         flags = idaapi.getFlags(ea)
@@ -185,9 +191,9 @@ class TypeDescriptor :
         Locate any candidates for a type descriptor object.
         Detected by the pattern: {pointer} {0} ".?AV"
         """
-        
+
         results = []
-        
+
         ea = searchBounds[0]
         lastEa = searchBounds[1] - 8
         while ea < lastEa :
@@ -206,7 +212,7 @@ class TypeDescriptor :
 class ClassHierarchyDescriptor :
     """
     """
-
+    
     def __init__(self, ea) :
         self.ea = ea
         self.cachedBaseList = None
@@ -221,12 +227,12 @@ class ClassHierarchyDescriptor :
         return not self.__eq__(other)
 
     def __str__(self) :
-        td = self.baseClassDescriptor[0].typeDescriptor
+        td = self.baseClassArray[0].typeDescriptor
         return "%08X: RTTI Class Hierarchy Descriptor for `%s'" % (self.ea, td.typeName)
 
     @property
     def attributes(self) :
-        return idaapi.get_full_long(self.ea + 4)
+        return ClassHierarchyDescriptor.__attributes(self.ea)
 
     @property
     def isMultipleInheritance(self) :
@@ -238,35 +244,33 @@ class ClassHierarchyDescriptor :
 
     @property
     def baseClassCount(self) :
-        return idaapi.get_full_long(self.ea + 8)
+        return ClassHierarchyDescriptor.__baseClassCount(self.ea)
 
     @property
-    def baseClassDescriptor(self) :
-        # FIXME: 64-bit compatibility
-        # Try caching the result...
-        if self.cachedBaseList is None :
-            bcdEas = ClassHierarchyDescriptor.getBcdEaList(self.ea)
-            self.cachedBaseList = [BaseClassDescriptor(bcdEa) for bcdEa in bcdEas]
-        return self.cachedBaseList
+    def baseClassArray(self) :
+        return BaseClassArray(
+                ClassHierarchyDescriptor.__baseClassArrayPtr(self.ea),
+                ClassHierarchyDescriptor.__baseClassCount(self.ea))
+
+    @staticmethod
+    def __attributes(ea) : return idaapi.get_full_long(ea + 4)
+    @staticmethod
+    def __baseClassCount(ea) : return idaapi.get_full_long(ea + 8)
+    @staticmethod
+    def __baseClassArrayPtr(ea) : return idaapi.get_full_long(ea + 12)
 
     @staticmethod
     def isValid(ea) :
         if idaapi.get_full_long(ea) != 0 :
             return False
-        attrs = idaapi.get_full_long(ea + 4)
+        attrs = ClassHierarchyDescriptor.__attributes(ea)
         if attrs > 3 :
             return False
-        baseCount = idaapi.get_full_long(ea + 8)
+        baseCount = ClassHierarchyDescriptor.__baseClassCount(ea)
         if baseCount > 1024 :
             return False
         # TODO: add sanity checks.
         return True
-
-    @staticmethod
-    def getBcdEaList(ea) :
-        baseCount = idaapi.get_full_long(ea + 8)
-        baseArrayEa = idaapi.get_full_long(ea + 12)
-        return [idaapi.get_full_long(ea) for ea in range(baseArrayEa, baseArrayEa + baseCount * 4, 4)]
 
     @staticmethod
     def isDefined(ea) :
@@ -282,7 +286,6 @@ class ClassHierarchyDescriptor :
     def define(ea) :
         if ClassHierarchyDescriptor.isDefined(ea) :
             return
-        print '%08X' % ea
         if not ClassHierarchyDescriptor.isValid(ea) :
             raise RttiError("%08X: Doesn't look like a correct ClassHierarchyDescriptor" % ea)
 
@@ -291,25 +294,65 @@ class ClassHierarchyDescriptor :
         idaapi.do_unknown_range(ea, size, idaapi.DOUNK_DELNAMES)
         idaapi.doStruct(ea, size, strid)
 
-        baseCount = idaapi.get_full_long(ea + 8)
-        # FIXME: 64-bit compatibility
-        baseArrayEa = idaapi.get_full_long(ea + 12)
-        idaapi.do_unknown_range(baseArrayEa, baseCount * 4, idaapi.DOUNK_DELNAMES)
-        idaapi.doDwrd(baseArrayEa, 4)
-        idaapi.do_data_ex(baseArrayEa, idaapi.getFlags(baseArrayEa), idaapi.get_item_size(baseArrayEa) * baseCount, idaapi.BADADDR)
+        bca = BaseClassArray(
+                ClassHierarchyDescriptor.__baseClassArrayPtr(ea),
+                ClassHierarchyDescriptor.__baseClassCount(ea))
 
         # Entry 0 describes the class itself => I can find out the class name.
-        bcdEas = ClassHierarchyDescriptor.getBcdEaList(ea)
-        entry0 = bcdEas[0]
-        bcd = BaseClassDescriptor(entry0)
-        className = bcd.typeDescriptor.baseMangledName
-        chdName = '??_R3' + className + '8'
-        idaapi.set_name(ea, chdName, 0)
-        bcaName = '??_R2' + className + '8'
-        idaapi.set_name(baseArrayEa, bcaName, 0)
+        idaapi.set_name(ea, '??_R3' + bca[0].typeDescriptor.baseMangledName + '8', 0)
 
-        for bcdEa in bcdEas :
-            BaseClassDescriptor.define(bcdEa)
+#
+# Base Class Array handling.
+#
+
+class BaseClassArray :
+    def __init__(self, ea, count) :
+        self.ea = ea
+        self.count = count
+        BaseClassArray.define(ea, count)
+    
+    def __len__(self) :
+        return self.count
+    
+    def __getitem__(self, index) :
+        if index < 0 or index >= self.count :
+            raise IndexError('Index too large')
+
+        return BaseClassDescriptor(idaapi.get_full_long(self.ea + index * 4))
+
+    def __str__(self) :
+        return "%08X: RTTI Base Class Array"
+
+    def parse(self, index = 0) :
+        """
+        Parse the class hierarchy, returning a tree of Node objects.
+        """
+        bcd = self[index]
+        basesCount = bcd.containedBasesCount
+        limit = index + basesCount
+        index += 1
+        while index <= limit :
+            parent = self.parse(index)
+            bcd.baseClasses.append(parent)
+            index += parent.containedBasesCount + 1
+        return bcd
+
+    @staticmethod
+    def define(ea, count) :
+        # TODO: sanity checks
+        
+        idaapi.do_unknown_range(ea, count * 4, idaapi.DOUNK_DELNAMES)
+        idaapi.doDwrd(ea, 4)
+        idaapi.do_data_ex(ea, idaapi.getFlags(ea), count * 4, idaapi.BADADDR)
+        
+        # Entry 0 describes the class itself => I can find out the class name.
+        bcd = BaseClassDescriptor(idaapi.get_full_long(ea))
+        idaapi.set_name(ea, '??_R2' + bcd.typeDescriptor.baseMangledName + '8', 0)
+
+        i = 1
+        while i < count :
+            bcd = BaseClassDescriptor(idaapi.get_full_long(ea + i * 4))
+            i += 1
 
 #
 # _s__RTTIBaseClassDescriptor2 handling.
@@ -330,9 +373,10 @@ def mangleNumber(num) :
 class BaseClassDescriptor :
     """
     """
-    
+
     def __init__(self, ea) :
         self.ea = ea
+        self.baseClasses = []
         BaseClassDescriptor.define(ea)
 
     def __eq__(self, other) :
@@ -349,21 +393,20 @@ class BaseClassDescriptor :
 
     @property
     def typeDescriptor(self) :
-        td = idaapi.get_full_long(self.ea)
-        return TypeDescriptor(td)
+        return TypeDescriptor(BaseClassDescriptor.__typeDescriptorPtr(self.ea))
 
     @property
     def containedBasesCount(self) :
-        return idaapi.get_full_long(self.ea + 4)
+        return BaseClassDescriptor.__containedBasesCount(self.ea)
 
     @property
     def where(self) :
-        return PMD(getInt32(self.ea + 8), getInt32(self.ea + 12), getInt32(self.ea + 16))
+        return BaseClassDescriptor.__where(self.ea)
 
     @property
     def attributes(self) :
-        return idaapi.get_full_long(self.ea + 20)
-    
+        return BaseClassDescriptor.__attributes(self.ea)
+
     @property
     def isVersion2(self) :
         return (self.attributes & 0x40) != 0
@@ -372,9 +415,19 @@ class BaseClassDescriptor :
     def classHierarchyDescriptor(self) :
         if not self.isVersion2 :
             raise NotImplementedError('No Class Hierarchy Descriptor reference available in V1 structures.')
-        chd = idaapi.get_full_long(self.ea + 24)
-        return ClassHierarchyDescriptor(chd)
-        
+        return ClassHierarchyDescriptor(BaseClassDescriptor.__v2ChdPtr(self.ea))
+
+    @staticmethod
+    def __typeDescriptorPtr(ea) : return idaapi.get_full_long(ea)
+    @staticmethod
+    def __containedBasesCount(ea) : return idaapi.get_full_long(ea + 4)
+    @staticmethod
+    def __where(ea) : return PMD(getInt32(ea + 8), getInt32(ea + 12), getInt32(ea + 16))
+    @staticmethod
+    def __attributes(ea) : return idaapi.get_full_long(ea + 20)
+    @staticmethod
+    def __v2ChdPtr(ea) : return idaapi.get_full_long(ea + 24)
+
     @staticmethod
     def isDefined(ea) :
         flags = idaapi.getFlags(ea)
@@ -390,12 +443,12 @@ class BaseClassDescriptor :
         if BaseClassDescriptor.isDefined(ea) :
             return
 
-        at = idaapi.get_full_long(ea)
-        TypeDescriptor.define(at)
+        td = TypeDescriptor(BaseClassDescriptor.__typeDescriptorPtr(ea))
 
-        attrs = idaapi.get_full_long(ea + 20)
+        attrs = BaseClassDescriptor.__attributes(ea)
         if attrs != 0 and attrs != 0x40 :
-            raise RttiError('%08X: Suspicious attributes value: %08X' % (ea, attrs))
+            print '%08X: Suspicious attributes value: %08X' % (ea, attrs)
+            # raise RttiError('%08X: Suspicious attributes value: %08X' % (ea, attrs))
         isV2 = (attrs & 0x40) != 0
         if isV2 :
             strid = idaapi.get_struc_id('_s__RTTIBaseClassDescriptor2')
@@ -404,18 +457,18 @@ class BaseClassDescriptor :
         size = idaapi.get_struc_size(strid)
         idaapi.do_unknown_range(ea, size, idaapi.DOUNK_DELNAMES)
         idaapi.doStruct(ea, size, strid)
-        
+
+        pmd = BaseClassDescriptor.__where(ea)
         name = '??_R1'
-        name += mangleNumber(getInt32(ea + 8))
-        name += mangleNumber(getInt32(ea + 12))
-        name += mangleNumber(getInt32(ea + 16))
-        name += mangleNumber(idaapi.get_full_long(ea + 20))
-        name += TypeDescriptor(idaapi.get_full_long(ea)).baseMangledName + '8'
+        name += mangleNumber(pmd.mdisp)
+        name += mangleNumber(pmd.pdisp)
+        name += mangleNumber(pmd.vdisp)
+        name += mangleNumber(attrs)
+        name += td.baseMangledName + '8'
         idaapi.set_name(ea, name, 0)
 
         if isV2 :
-            at = idaapi.get_full_long(ea + 24)
-            ClassHierarchyDescriptor.define(at)
+            ClassHierarchyDescriptor.define(BaseClassDescriptor.__v2ChdPtr(ea))
 
 #
 # _s__RTTICompleteObjectLocator handling.
@@ -427,7 +480,7 @@ class CompleteObjectLocator :
     the location of the complete object from a specific vftable pointer 
     (since a class can have several of them).
     """
-    
+
     def __init__(self, ea) :
         self.ea = ea
         CompleteObjectLocator.define(ea)
@@ -515,13 +568,14 @@ class CompleteObjectLocator :
                 print '%08X: Cannot handle multiple inheritance yet.' % (ea)
         else :
             idaapi.set_name(ea, '??_R4' + td.baseMangledName + '6B@', 0)
-        
+
 #
 # Integrated scanner
 #
 
 def scanRtti() :
     dataBounds = getSegBoundaries(".data")
+    rdataBounds = getSegBoundaries(".rdata")
     if dataBounds is None :
         print "No .data section found. Cannot continue."
         return False
@@ -529,17 +583,28 @@ def scanRtti() :
     print "Scanning for TypeDescriptors (might take a while)..."
     tds = TypeDescriptor.findAll(dataBounds)
     print "Found %d descriptor(s)." % len(tds)
-    
-    print "Scanning TypeDescriptors for CompleteObjectLocator refs..."
+
+    print "Defining TypeDescriptors..."
     for ea in tds :
         x = TypeDescriptor(ea)
         print x
-        for xref in idautils.DataRefsTo(ea) :
+    
+    print "Scanning TypeDescriptors for CompleteObjectLocator refs..."
+    cols = []
+    ea = rdataBounds[0]
+    lastEa = rdataBounds[1]
+    while ea < lastEa :
+        ptr = idaapi.get_full_long(ea)
+        if (dataBounds[0] <= ptr < dataBounds[1]) and (ptr in tds) :
+            # print "%08X" % ptr
             try :
                 # Correct the address.
-                xref -= 12
-                col = CompleteObjectLocator(xref)
+                colPtr = ea - 12
+                col = CompleteObjectLocator(colPtr)
                 print col
+                cols.append(colPtr)
             except Exception, e:
-                # print e
+                # print traceback.format_exc()
                 pass
+        ea += 4
+    print "Found %d CompleteObjectLocator(s)." % len(cols)
